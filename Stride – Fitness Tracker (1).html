@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stride – Fitness Tracker</title>
+<style>
+/* ========== 1. DESIGN TOKENS (light + dark) ========== */
+:root{--bg:#eef3f0;--card:#fff;--ink:#12312b;--muted:#5f7a73;--line:#dbe5e0;--side:#12312b;--side-ink:#cfe3dc;
+--steps:#0f9d8a;--cal:#f26b3a;--dist:#3b6fd4;--time:#7a5cd6;--ok:#1f9d55;--err:#d23b3b;--r:16px;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1714;--card:#16231f;--ink:#e6f2ee;--muted:#8fa9a1;--line:#243630;--side:#09110f;--steps:#2fd0b9;--cal:#ff8a5c;--dist:#7ea3f5;--time:#a58df0}}
+:root[data-theme="dark"]{--bg:#0d1714;--card:#16231f;--ink:#e6f2ee;--muted:#8fa9a1;--line:#243630;--side:#09110f;--steps:#2fd0b9;--cal:#ff8a5c;--dist:#7ea3f5;--time:#a58df0}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--steps);outline-offset:2px}
+
+/* ========== 2. LAYOUT: sidebar (desktop) / bottom bar (mobile) ========== */
+.app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+nav{background:var(--side);color:var(--side-ink);padding:24px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px}
+.logo{font-size:1.5rem;font-weight:800;color:#fff;padding:0 10px 18px;letter-spacing:-.5px}
+.logo span{color:var(--cal)}
+nav a{display:flex;gap:12px;align-items:center;padding:11px 12px;border-radius:12px;color:inherit;text-decoration:none;transition:.2s}
+nav a:hover{background:rgba(255,255,255,.08)}
+nav a.on{background:var(--cal);color:#fff;font-weight:600}
+main{padding:28px clamp(16px,3vw,40px) 40px;max-width:1100px;width:100%}
+h1{font-size:clamp(1.5rem,3vw,2rem);margin:0 0 4px;letter-spacing:-.5px}
+h2{font-size:1.1rem;margin:0 0 14px}
+.sub{color:var(--muted);margin:0 0 22px}
+.grid{display:grid;gap:16px}
+.g4{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.view{display:none}.view.show{display:block;animation:in .35s ease}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ========== 3. COMPONENTS ========== */
+.stat{position:relative;overflow:hidden}
+.stat .ico{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:1.4rem;background:color-mix(in srgb,var(--c) 16%,transparent)}
+.stat .val{font-size:1.9rem;font-weight:800;margin:10px 0 0;letter-spacing:-1px}
+.stat .lbl{color:var(--muted);font-size:.9rem}
+.pct{position:absolute;top:18px;right:18px;font-weight:700;color:var(--c)}
+.bar{height:10px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:12px}
+.bar i{display:block;height:100%;width:0;background:var(--c,var(--steps));border-radius:99px;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+label{display:block;font-weight:600;font-size:.9rem;margin-bottom:4px}
+.f{margin-bottom:14px}
+input,select{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg)}
+input.bad{border-color:var(--err)}
+.err{color:var(--err);font-size:.82rem;min-height:1.1em;margin-top:2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn{border:0;background:var(--steps);color:#fff;padding:11px 20px;border-radius:10px;font-weight:700;cursor:pointer;transition:transform .15s,filter .2s}
+.btn:hover{filter:brightness(1.08);transform:translateY(-1px)}.btn:active{transform:scale(.96)}
+.btn.alt{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn.sm{padding:6px 12px;font-size:.85rem}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.item .grow{flex:1;min-width:0}.item small{color:var(--muted)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.tab{padding:7px 14px;border-radius:99px;border:1.5px solid var(--line);background:none;cursor:pointer}
+.tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chart{width:100%;height:auto;display:block}
+.bar-rect{transform-box:fill-box;transform-origin:bottom;animation:grow .7s ease both}
+@keyframes grow{from{transform:scaleY(0)}}
+.empty{color:var(--muted);text-align:center;padding:22px}
+.tag{display:inline-block;font-size:.78rem;padding:2px 9px;border-radius:99px;background:var(--line)}
+.done{opacity:.6}
+.bmi-scale{height:12px;border-radius:99px;margin:18px 0 6px;position:relative;background:linear-gradient(90deg,#4aa3df 0 18%,#1f9d55 18% 42%,#f0b429 42% 62%,#d23b3b 62%)}
+.bmi-scale b{position:absolute;top:-5px;width:6px;height:22px;background:var(--ink);border-radius:3px;transition:left .8s;left:0}
+#toast{position:fixed;left:50%;bottom:90px;transform:translate(-50%,30px);background:var(--ink);color:var(--bg);padding:10px 20px;border-radius:99px;opacity:0;transition:.3s;pointer-events:none;z-index:9}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+
+@media (max-width:820px){
+ .app{grid-template-columns:1fr}
+ nav{position:fixed;bottom:0;left:0;right:0;top:auto;height:auto;flex-direction:row;padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));z-index:5;justify-content:space-around;gap:0;overflow-x:auto}
+ .logo{display:none}
+ nav a{flex-direction:column;gap:0;padding:6px 8px;font-size:.66rem;min-width:56px;text-align:center}
+ nav a span.i{font-size:1.25rem}
+ main{padding-bottom:100px}
+ .row{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+ <nav id="nav" aria-label="Main"></nav>
+ <main>
+  <section class="view" id="dashboard"></section>
+  <section class="view" id="activities"></section>
+  <section class="view" id="workouts"></section>
+  <section class="view" id="goals"></section>
+  <section class="view" id="progress"></section>
+  <section class="view" id="bmi"></section>
+  <section class="view" id="profile"></section>
+ </main>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+/* =====================================================
+   STRIDE FITNESS TRACKER – vanilla JS, data in localStorage
+   Sections: 1 Data/storage · 2 Helpers · 3 Views · 4 Forms · 5 Router
+   ===================================================== */
+
+/* ---------- 1. DATA & STORAGE ---------- */
+const KEY = 'strideFitnessV1';
+// Activity types: kcal burned per minute, average speed (km/h), icon
+const TYPES = {
+  Walking:{kcal:5,kmh:5,ico:'🚶'}, Running:{kcal:11,kmh:9,ico:'🏃'}, Cycling:{kcal:8,kmh:18,ico:'🚴'},
+  'Gym Workout':{kcal:7,kmh:0,ico:'🏋️'}, Yoga:{kcal:3.5,kmh:0,ico:'🧘'}
+};
+// Workout library: category -> list of workouts
+const WORKOUTS = {
+  Strength:[{id:'s1',n:'Full-body dumbbells',m:35,k:260,t:'Gym Workout'},{id:'s2',n:'Push-up challenge',m:15,k:110,t:'Gym Workout'}],
+  Cardio:[{id:'c1',n:'Easy 5K run',m:30,k:330,t:'Running'},{id:'c2',n:'Brisk walk',m:40,k:200,t:'Walking'}],
+  HIIT:[{id:'h1',n:'20-minute HIIT',m:20,k:240,t:'Gym Workout'},{id:'h2',n:'Tabata burner',m:12,k:150,t:'Gym Workout'}],
+  'Yoga & Stretch':[{id:'y1',n:'Morning flow',m:20,k:70,t:'Yoga'},{id:'y2',n:'Deep stretch',m:15,k:50,t:'Yoga'}]
+};
+const iso = d => { const z = new Date(d); z.setMinutes(z.getMinutes()-z.getTimezoneOffset()); return z.toISOString().slice(0,10); };
+const today = () => iso(new Date());
+const daysAgo = n => { const d = new Date(); d.setDate(d.getDate()-n); return iso(d); };
+
+// Build 30 days of sample history so charts look alive on first launch
+function seed(){
+  let s = 7; const rnd = () => (s = (s*9301+49297)%233280)/233280;
+  const acts = [], names = Object.keys(TYPES);
+  for(let i=29;i>=1;i--){
+    const t = names[Math.floor(rnd()*3)]; const dur = Math.round(20+rnd()*30+(30-i)*.5);
+    acts.push(makeActivity(t,daysAgo(i),dur));
+    if(rnd()>.6) acts.push(makeActivity(names[3+Math.floor(rnd()*2)],daysAgo(i),Math.round(20+rnd()*25)));
+  }
+  return {profile:{name:'Alex Morgan',age:28,height:172,weight:68,goal:'Stay active'},
+          goals:{steps:10000,calories:500,minutes:45}, activities:acts};
+}
+// Create an activity; fills in distance/calories/steps from duration when not given
+function makeActivity(type,date,dur,dist,kcal,wid){
+  const T = TYPES[type];
+  dist = dist ?? +(T.kmh*dur/60).toFixed(2);
+  kcal = kcal ?? Math.round(T.kcal*dur);
+  const steps = (type==='Walking'||type==='Running') ? Math.round(dist*1312) : 0; // ≈1312 steps per km
+  return {id:Date.now()+Math.random(),type,date,dur,dist,kcal,steps,wid:wid||null};
+}
+let db;
+try{ db = JSON.parse(localStorage.getItem(KEY)); }catch(e){}
+if(!db || !db.profile) db = seed();
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify(db)); }catch(e){} }  // storage may be unavailable
+save();
+
+/* ---------- 2. HELPERS ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => Math.round(n).toLocaleString();
+const pctOf = (v,g) => Math.min(100,Math.round(v/g*100));
+const longDate = d => new Date(d+'T00:00').toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toast.id); toast.id=setTimeout(()=>t.classList.remove('on'),2200); }
+// Totals for a single date
+function dayTotals(d){
+  return db.activities.filter(a=>a.date===d).reduce((t,a)=>(t.steps+=a.steps,t.kcal+=a.kcal,t.dist+=a.dist,t.min+=a.dur,t),{steps:0,kcal:0,dist:0,min:0});
+}
+// Series for the last n days (oldest first), offset shifts the window back
+function series(n,key,offset=0){
+  return Array.from({length:n},(_,i)=>{ const d=daysAgo(n-1-i+offset); return {d,v:dayTotals(d)[key]}; });
+}
+// Validation helper: returns error text or '' – used by every form
+function num(v,label,min,max,int){
+  if(v===''||v==null) return label+' is required.';
+  const n=Number(v); if(isNaN(n)) return label+' must be a number.';
+  if(int&&!Number.isInteger(n)) return label+' must be a whole number.';
+  if(n<min||n>max) return label+' must be between '+min+' and '+max+'.';
+  return '';
+}
+// Show errors under fields; returns true when form is valid
+function check(form,rules){
+  let ok=true;
+  for(const [id,fn] of Object.entries(rules)){
+    const msg=fn(); const el=form.querySelector('#'+id);
+    el.classList.toggle('bad',!!msg); el.parentElement.querySelector('.err').textContent=msg; if(msg) ok=false;
+  }
+  return ok;
+}
+const field = (id,label,type='number',extra='') => `<div class="f"><label for="${id}">${label}</label><input id="${id}" type="${type}" ${extra}><div class="err"></div></div>`;
+function animateBars(){ requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('.bar i[data-w]').forEach(b=>b.style.width=b.dataset.w+'%'))); }
+
+/* ---------- 3. VIEWS ---------- */
+const NAV = [['dashboard','🏠','Dashboard'],['activities','📝','Activities'],['workouts','💪','Workouts'],['goals','🎯','Goals'],['progress','📈','Progress'],['bmi','⚖️','BMI Calculator'],['profile','👤','Profile']];
+$('#nav').innerHTML = '<div class="logo">Stride<span>.</span></div>' + NAV.map(n=>`<a href="#${n[0]}" data-v="${n[0]}"><span class="i">${n[1]}</span><span>${n[2]}</span></a>`).join('');
+
+/* Dashboard: today's summary cards */
+function viewDashboard(){
+  const t=dayTotals(today()), g=db.goals, h=new Date().getHours();
+  const hello = h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+  const cards=[
+    ['👟','Steps',fmt(t.steps),pctOf(t.steps,g.steps),'var(--steps)',`of ${fmt(g.steps)} goal`],
+    ['🔥','Calories burned',fmt(t.kcal)+' kcal',pctOf(t.kcal,g.calories),'var(--cal)',`of ${fmt(g.calories)} goal`],
+    ['📍','Distance',t.dist.toFixed(1)+' km',pctOf(t.dist,Math.max(g.steps/1312,.1)),'var(--dist)','vs. steps-goal distance'],
+    ['⏱️','Workout time',fmt(t.min)+' min',pctOf(t.min,g.minutes),'var(--time)',`of ${g.minutes} min goal`]];
+  const recent=[...db.activities].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
+  $('#dashboard').innerHTML=`<h1>${hello}, ${esc(db.profile.name.split(' ')[0])}!</h1><p class="sub">Here is your summary for today. Goal: ${esc(db.profile.goal)}.</p>
+  <div class="grid g4">${cards.map(c=>`<div class="card stat" style="--c:${c[4]}"><div class="ico">${c[0]}</div><span class="pct">${c[3]}%</span><div class="val">${c[2]}</div><div class="lbl">${c[1]} · ${c[5]}</div><div class="bar"><i data-w="${c[3]}"></i></div></div>`).join('')}</div>
+  <div class="grid g2" style="margin-top:16px"><div class="card"><h2>Last 7 days: steps</h2><div id="dChart"></div></div>
+  <div class="card"><h2>Recent activity</h2>${recent.length?`<div class="list">${recent.map(actRow).join('')}</div>`:'<div class="empty">No activity yet. Add your first one!</div>'}</div></div>`;
+  chart($('#dChart'),series(7,'steps'),'var(--steps)');
+}
+const actRow = a => `<div class="item"><span style="font-size:1.5rem">${TYPES[a.type].ico}</span><div class="grow"><b>${a.type}</b><br><small>${longDate(a.date)} · ${a.dur} min · ${a.dist} km · ${a.kcal} kcal</small></div></div>`;
+
+/* Activities: add form + history list */
+function viewActivities(){
+  const list=[...db.activities].sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id).slice(0,30);
+  $('#activities').innerHTML=`<h1>Activities</h1><p class="sub">Log what you did. Leave distance or calories empty to estimate them automatically.</p>
+  <div class="grid g2"><form class="card" id="actForm" novalidate><h2>Add activity</h2>
+   <div class="f"><label for="aType">Activity</label><select id="aType">${Object.keys(TYPES).map(t=>`<option>${t}</option>`).join('')}</select><div class="err"></div></div>
+   ${field('aDate','Date','date',`value="${today()}" max="${today()}"`)}
+   <div class="row">${field('aDur','Duration (min)','number','min="1" step="1" placeholder="30"')}${field('aDist','Distance (km)','number','step="0.01" placeholder="auto"')}</div>
+   ${field('aKcal','Calories burned','number','step="1" placeholder="auto"')}
+   <button class="btn">Add activity</button></form>
+  <div class="card"><h2>History</h2>${list.length?`<div class="list">${list.map(a=>`<div class="item"><span style="font-size:1.5rem">${TYPES[a.type].ico}</span><div class="grow"><b>${a.type}</b><br><small>${longDate(a.date)} · ${a.dur} min · ${a.dist} km · ${a.kcal} kcal</small></div><button class="btn alt sm" data-del="${a.id}" aria-label="Delete ${a.type}">Delete</button></div>`).join('')}</div>`:'<div class="empty">Nothing logged yet.</div>'}</div></div>`;
+  const f=$('#actForm');
+  f.onsubmit=e=>{ e.preventDefault();
+    const v=id=>f.querySelector('#'+id).value.trim();
+    const optional=(id,label,max)=>v(id)===''?'':num(v(id),label,0,max,false);
+    const ok=check(f,{
+      aDate:()=>!v('aDate')?'Date is required.':v('aDate')>today()?'Date cannot be in the future.':'',
+      aDur:()=>num(v('aDur'),'Duration',1,1440,true),
+      aDist:()=>optional('aDist','Distance',500),
+      aKcal:()=>optional('aKcal','Calories',20000)});
+    if(!ok) return;
+    db.activities.push(makeActivity(v('aType'),v('aDate'),+v('aDur'),v('aDist')===''?undefined:+v('aDist'),v('aKcal')===''?undefined:+v('aKcal')));
+    save(); toast('Activity added'); viewActivities();
+  };
+  f.querySelectorAll('input').forEach(i=>i.oninput=()=>{i.classList.remove('bad');i.parentElement.querySelector('.err').textContent='';});
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ db.activities=db.activities.filter(a=>String(a.id)!==b.dataset.del); save(); toast('Activity deleted'); viewActivities(); });
+}
+
+/* Workouts: pick a workout and mark it done (adds an activity for today) */
+function viewWorkouts(){
+  const doneToday=new Set(db.activities.filter(a=>a.date===today()&&a.wid).map(a=>a.wid));
+  $('#workouts').innerHTML=`<h1>Workouts</h1><p class="sub">Pick a workout and mark it complete. It is added to today’s activity.</p>`+
+  Object.entries(WORKOUTS).map(([cat,ws])=>`<div class="card" style="margin-bottom:16px"><h2>${cat}</h2><div class="list">${ws.map(w=>`<div class="item ${doneToday.has(w.id)?'done':''}"><div class="grow"><b>${w.n}</b><br><small>⏱ ${w.m} min · 🔥 ~${w.k} kcal</small></div>${doneToday.has(w.id)?'<span class="tag">✓ Done today</span>':`<button class="btn sm" data-w="${w.id}">Mark complete</button>`}</div>`).join('')}</div></div>`).join('');
+  document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{
+    const w=Object.values(WORKOUTS).flat().find(x=>x.id===b.dataset.w);
+    db.activities.push(makeActivity(w.t,today(),w.m,undefined,w.k,w.id)); save(); toast('Nice work! '+w.n+' completed'); viewWorkouts();
+  });
+}
+
+/* Goals: edit daily targets + live progress bars */
+function viewGoals(){
+  const t=dayTotals(today()), g=db.goals;
+  const rows=[['👟 Steps',t.steps,g.steps,'var(--steps)',''],['🔥 Calories',t.kcal,g.calories,'var(--cal)',' kcal'],['⏱️ Workout time',t.min,g.minutes,'var(--time)',' min']];
+  $('#goals').innerHTML=`<h1>Goals</h1><p class="sub">Set your daily targets and watch today’s progress.</p>
+  <div class="grid g2"><div class="card"><h2>Today’s progress</h2>${rows.map(r=>`<div style="margin-bottom:18px;--c:${r[3]}"><div class="top"><b>${r[0]}</b><span>${fmt(r[1])} / ${fmt(r[2])}${r[4]} · <b>${pctOf(r[1],r[2])}%</b></span></div><div class="bar"><i data-w="${pctOf(r[1],r[2])}"></i></div>${r[1]>=r[2]?'<small>🎉 Goal reached!</small>':''}</div>`).join('')}</div>
+  <form class="card" id="goalForm" novalidate><h2>Daily goals</h2>${field('gSteps','Steps per day','number',`step="100" value="${g.steps}"`)}${field('gCal','Calories per day (kcal)','number',`value="${g.calories}"`)}${field('gMin','Workout minutes per day','number',`value="${g.minutes}"`)}<button class="btn">Save goals</button></form></div>`;
+  const f=$('#goalForm');
+  f.onsubmit=e=>{ e.preventDefault(); const v=id=>f.querySelector('#'+id).value.trim();
+    if(!check(f,{gSteps:()=>num(v('gSteps'),'Steps',500,100000,true),gCal:()=>num(v('gCal'),'Calories',50,10000,true),gMin:()=>num(v('gMin'),'Minutes',5,600,true)})) return;
+    db.goals={steps:+v('gSteps'),calories:+v('gCal'),minutes:+v('gMin')}; save(); toast('Goals saved'); viewGoals(); };
+}
+
+/* Progress: weekly / monthly bar charts with improvement vs previous period */
+let pMetric='steps', pDays=7;
+function viewProgress(){
+  const M={steps:['Steps','var(--steps)',''],kcal:['Calories','var(--cal)',' kcal'],min:['Workout time','var(--time)',' min']};
+  const cur=series(pDays,pMetric), prev=series(pDays,pMetric,pDays);
+  const sum=a=>a.reduce((s,x)=>s+x.v,0), c=sum(cur), p=sum(prev), ch=p?Math.round((c-p)/p*100):0;
+  $('#progress').innerHTML=`<h1>Progress</h1><p class="sub">See how you are improving over time.</p>
+  <div class="card"><div class="tabs">${Object.entries(M).map(([k,m])=>`<button class="tab ${k===pMetric?'on':''}" data-m="${k}">${m[0]}</button>`).join('')}<span style="flex:1"></span>
+  <button class="tab ${pDays===7?'on':''}" data-p="7">Weekly</button><button class="tab ${pDays===30?'on':''}" data-p="30">Monthly</button></div>
+  <div class="grid g4" style="margin-bottom:14px"><div><div class="lbl" style="color:var(--muted)">Total (${pDays} days)</div><b style="font-size:1.5rem">${fmt(c)}${M[pMetric][2]}</b></div>
+  <div><div style="color:var(--muted)">Daily average</div><b style="font-size:1.5rem">${fmt(c/pDays)}${M[pMetric][2]}</b></div>
+  <div><div style="color:var(--muted)">vs. previous ${pDays} days</div><b style="font-size:1.5rem;color:${ch>=0?'var(--ok)':'var(--err)'}">${ch>=0?'▲':'▼'} ${Math.abs(ch)}%</b></div></div>
+  <div id="pChart"></div></div>`;
+  chart($('#pChart'),cur,M[pMetric][1]);
+  document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{pMetric=b.dataset.m;viewProgress();});
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{pDays=+b.dataset.p;viewProgress();});
+}
+// Reusable SVG bar chart: data = [{d:'YYYY-MM-DD', v:number}]
+function chart(el,data,color){
+  const W=640,H=230,pb=26,pt=14,max=Math.max(...data.map(x=>x.v),1),n=data.length,slot=W/n,bw=slot*.62;
+  const step=n>10?5:1; let out=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart">`;
+  for(let i=0;i<=3;i++){ const y=pt+(H-pb-pt)*i/3; out+=`<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)"/>`; }
+  data.forEach((x,i)=>{
+    const h=(H-pb-pt)*x.v/max, X=i*slot+(slot-bw)/2, Y=H-pb-h;
+    out+=`<rect class="bar-rect" x="${X}" y="${Y}" width="${bw}" height="${Math.max(h,1)}" rx="4" fill="${color}" style="animation-delay:${i*25}ms"><title>${longDate(x.d)}: ${fmt(x.v)}</title></rect>`;
+    if(i%step===0||i===n-1) out+=`<text x="${i*slot+slot/2}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--muted)">${n>10?new Date(x.d+'T00:00').getDate():new Date(x.d+'T00:00').toLocaleDateString(undefined,{weekday:'short'})}</text>`;
+  });
+  el.innerHTML=out+'</svg>';
+}
+
+/* BMI calculator */
+function bmiInfo(b){ return b<18.5?['Underweight','#4aa3df']:b<25?['Healthy weight','#1f9d55']:b<30?['Overweight','#f0b429']:['Obese','#d23b3b']; }
+function viewBMI(){
+  $('#bmi').innerHTML=`<h1>BMI Calculator</h1><p class="sub">Body Mass Index is a simple guide, not a medical diagnosis.</p>
+  <div class="grid g2"><form class="card" id="bmiForm" novalidate>${field('bH','Height (cm)','number',`step="0.1" value="${db.profile.height}"`)}${field('bW','Weight (kg)','number',`step="0.1" value="${db.profile.weight}"`)}<button class="btn">Calculate BMI</button></form>
+  <div class="card" id="bmiOut"><div class="empty">Enter your height and weight to see your result.</div></div></div>`;
+  const f=$('#bmiForm');
+  f.onsubmit=e=>{ e.preventDefault(); const v=id=>f.querySelector('#'+id).value.trim();
+    if(!check(f,{bH:()=>num(v('bH'),'Height',50,260),bW:()=>num(v('bW'),'Weight',10,500)})) return;
+    const h=v('bH')/100, b=v('bW')/(h*h), [cat,col]=bmiInfo(b), pos=Math.min(100,Math.max(0,(b-12)/(40-12)*100));
+    $('#bmiOut').innerHTML=`<h2>Your result</h2><div style="font-size:3rem;font-weight:800;color:${col}">${b.toFixed(1)}</div><b>${cat}</b>
+    <div class="bmi-scale"><b id="mark"></b></div><small style="color:var(--muted)">Under 18.5 · 18.5–24.9 · 25–29.9 · 30+</small>`;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>$('#mark').style.left=`calc(${pos}% - 3px)`));
+  };
+}
+
+/* Profile */
+function viewProfile(){
+  const p=db.profile;
+  $('#profile').innerHTML=`<h1>Profile</h1><p class="sub">Keep your details up to date.</p>
+  <form class="card" id="pForm" novalidate style="max-width:560px">${field('pName','Name','text',`value="${esc(p.name)}" maxlength="40"`)}
+  <div class="row">${field('pAge','Age','number',`value="${p.age}"`)}${field('pH','Height (cm)','number',`step="0.1" value="${p.height}"`)}</div>
+  ${field('pW','Weight (kg)','number',`step="0.1" value="${p.weight}"`)}
+  <div class="f"><label for="pGoal">Fitness goal</label><select id="pGoal">${['Lose weight','Build muscle','Improve endurance','Stay active'].map(o=>`<option ${o.toLowerCase()===p.goal.toLowerCase()?'selected':''}>${o}</option>`).join('')}</select><div class="err"></div></div>
+  <button class="btn">Update profile</button></form>`;
+  const f=$('#pForm');
+  f.onsubmit=e=>{ e.preventDefault(); const v=id=>f.querySelector('#'+id).value.trim();
+    if(!check(f,{pName:()=>v('pName').length<2?'Name must be at least 2 characters.':'',pAge:()=>num(v('pAge'),'Age',10,110,true),pH:()=>num(v('pH'),'Height',50,260),pW:()=>num(v('pW'),'Weight',10,500)})) return;
+    db.profile={name:v('pName'),age:+v('pAge'),height:+v('pH'),weight:+v('pW'),goal:v('pGoal')}; save(); toast('Profile updated');
+  };
+}
+
+/* ---------- 5. ROUTER (plain #name hash) ---------- */
+const VIEWS={dashboard:viewDashboard,activities:viewActivities,workouts:viewWorkouts,goals:viewGoals,progress:viewProgress,bmi:viewBMI,profile:viewProfile};
+function route(){
+  const name=VIEWS[location.hash.slice(1)]?location.hash.slice(1):'dashboard';
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('show',v.id===name));
+  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===name));
+  VIEWS[name](); animateBars(); scrollTo(0,0);
+}
+addEventListener('hashchange',route); route();
+</script>
+</body>
+</html>
